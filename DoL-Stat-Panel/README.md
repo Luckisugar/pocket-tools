@@ -2,7 +2,7 @@
 
 Floating browser console panel for **Degrees of Lewdity** (SugarCube / Twine HTML build).
 
-Edits money + state stats (pain, fatigue, stress, control, etc.) **without** turning on the game’s official Cheat mode, so it does **not** set `feats.locked`.
+Edits money, state stats (pain, fatigue, stress, control, etc.), **crime** (collapsible dock), and infinite pepper spray **without** turning on the game’s official Cheat mode, so it does **not** set `feats.locked`.
 
 ## Why not Cheat Engine?
 

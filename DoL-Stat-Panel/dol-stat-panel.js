@@ -5,20 +5,24 @@
  * Usage: open the game, load a save, F12 → Console → paste this whole file → Enter.
  * Prefer: open START-HERE-Stat-Panel.html → Copy → paste into game console.
  *
- * After time passes the game swaps State.variables — this panel re-binds live V
- * on every slider move and on each passage render (auto reconnect).
- *
  * Close: click X, or run: window.__dolStatPanelRemove && window.__dolStatPanelRemove()
  */
 (() => {
 	const PANEL_ID = "dol-stat-panel";
 
 	const getV = () => {
-		// Always read live state (SugarCube replaces variables after each passage / time pass)
 		if (typeof V !== "undefined" && V != null && typeof V.money === "number") return V;
 		try {
 			const vars = window.SugarCube && window.SugarCube.State && window.SugarCube.State.variables;
 			if (vars && typeof vars.money === "number") return vars;
+		} catch (_) {}
+		return null;
+	};
+
+	const getSetup = () => {
+		try {
+			if (typeof setup !== "undefined" && setup) return setup;
+			if (window.SugarCube && window.SugarCube.setup) return window.SugarCube.setup;
 		} catch (_) {}
 		return null;
 	};
@@ -28,7 +32,6 @@
 		return;
 	}
 
-	// Tear down previous panel + listeners if re-pasted
 	if (typeof window.__dolStatPanelRemove === "function") {
 		try {
 			window.__dolStatPanelRemove();
@@ -47,6 +50,41 @@
 		{ key: "hallucinogen", label: "Hallucinogens", max: 1000 },
 	];
 
+	const CRIME_FALLBACK = {
+		assault: "Assault",
+		coercion: "Coercion",
+		destruction: "Destruction of property",
+		exposure: "Indecent exposure",
+		obstruction: "Obstruction of justice",
+		prostitution: "Prostitution",
+		resisting: "Resisting arrest",
+		thievery: "Thievery",
+		petty: "Petty thievery",
+		trespassing: "Trespassing",
+	};
+
+	const titleCase = (s) =>
+		String(s || "")
+			.split(" ")
+			.map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+			.join(" ");
+
+	const crimeList = () => {
+		const s = getSetup();
+		const names = (s && s.crimeNames) || CRIME_FALLBACK;
+		return Object.keys(names).map((key) => ({
+			key,
+			label: titleCase(names[key] || CRIME_FALLBACK[key] || key),
+		}));
+	};
+
+	const crimeMax = () => {
+		try {
+			if (typeof C !== "undefined" && C.crime && typeof C.crime.max === "number") return C.crime.max;
+		} catch (_) {}
+		return 10000;
+	};
+
 	const maxOf = (s, v) => (typeof s.max === "function" ? s.max(v) : s.max);
 
 	const gameRefresh = () => {
@@ -61,7 +99,88 @@
 		}
 	};
 
-	/** Pull live V into sliders / labels */
+	const ensureCrimeSliders = () => {
+		const body = document.getElementById("dol-crime-body");
+		if (!body) return;
+		const list = crimeList();
+		const existing = new Set(
+			[...body.querySelectorAll("[data-crime-key]")].map((el) => el.getAttribute("data-crime-key"))
+		);
+		// If keys mismatch (first paint / update), rebuild
+		const want = list.map((c) => c.key).join(",");
+		if (body.dataset.keys === want) return;
+		body.dataset.keys = want;
+		body.innerHTML = "";
+
+		const zeroRow = document.createElement("div");
+		zeroRow.style.cssText = "display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap";
+		const zeroBtn = document.createElement("button");
+		zeroBtn.textContent = "Zero all crime";
+		zeroBtn.title = "Set every crime.current (and daily) to 0";
+		Object.assign(zeroBtn.style, {
+			flex: "1",
+			padding: "6px 8px",
+			borderRadius: "6px",
+			border: "1px solid #666",
+			background: "#2a2a32",
+			color: "#eee",
+			cursor: "pointer",
+		});
+		zeroBtn.onclick = () => {
+			const v = getV();
+			if (!v || !v.crime) return reconnect();
+			for (const c of list) {
+				if (!v.crime[c.key]) continue;
+				v.crime[c.key].current = 0;
+				if (typeof v.crime[c.key].daily === "number") v.crime[c.key].daily = 0;
+			}
+			gameRefresh();
+			syncFromGame();
+		};
+		zeroRow.appendChild(zeroBtn);
+		body.appendChild(zeroRow);
+
+		for (const c of list) {
+			const row = document.createElement("div");
+			row.style.marginBottom = "8px";
+			row.setAttribute("data-crime-key", c.key);
+			const top = document.createElement("div");
+			top.style.cssText = "display:flex;justify-content:space-between";
+			top.innerHTML =
+				"<span>" +
+				c.label +
+				'</span><span id="dol-crime-val-' +
+				c.key +
+				'">0</span>';
+			const sl = document.createElement("input");
+			sl.type = "range";
+			sl.id = "dol-crime-sl-" + c.key;
+			sl.min = 0;
+			sl.max = crimeMax();
+			sl.step = 10;
+			sl.style.width = "100%";
+			sl.oninput = () => {
+				const v = getV();
+				if (!v || !v.crime || !v.crime[c.key]) return reconnect();
+				v.crime[c.key].current = Number(sl.value);
+				const lab = document.getElementById("dol-crime-val-" + c.key);
+				if (lab) lab.textContent = Math.round(v.crime[c.key].current);
+			};
+			sl.onchange = () => {
+				const v = getV();
+				if (!v || !v.crime || !v.crime[c.key]) return reconnect();
+				v.crime[c.key].current = Number(sl.value);
+				// keep count consistent with official setter rules
+				if (v.crime[c.key].current === 0) v.crime[c.key].count = 0;
+				else if (!v.crime[c.key].count) v.crime[c.key].count = 1;
+				gameRefresh();
+				syncFromGame();
+			};
+			row.append(top, sl);
+			body.appendChild(row);
+		}
+	};
+
 	const syncFromGame = () => {
 		const v = getV();
 		const status = document.getElementById("dol-status");
@@ -72,6 +191,9 @@
 			}
 			return false;
 		}
+
+		ensureCrimeSliders();
+
 		for (const s of STATE) {
 			const el = document.getElementById("dol-sl-" + s.key);
 			const lab = document.getElementById("dol-val-" + s.key);
@@ -82,6 +204,7 @@
 			el.value = Math.min(Math.max(0, raw), m);
 			if (lab) lab.textContent = Math.round(raw);
 		}
+
 		const moneyEl = document.getElementById("dol-money");
 		const moneyLab = document.getElementById("dol-money-val");
 		const moneyNum = document.getElementById("dol-money-num");
@@ -91,6 +214,28 @@
 			if (moneyLab) moneyLab.textContent = "£" + pounds.toLocaleString("en-GB");
 			if (moneyNum && document.activeElement !== moneyNum) moneyNum.value = pounds;
 		}
+
+		// Infinite pepper spray
+		const sprayBtn = document.getElementById("dol-spray-btn");
+		if (sprayBtn) {
+			const on = !!v.infinitespray;
+			sprayBtn.textContent = on ? "Infinite spray: ON" : "Infinite spray: OFF";
+			sprayBtn.style.borderColor = on ? "#6a6" : "#666";
+			sprayBtn.style.color = on ? "#9f9" : "#eee";
+		}
+
+		// Crime
+		const cmax = crimeMax();
+		for (const c of crimeList()) {
+			const el = document.getElementById("dol-crime-sl-" + c.key);
+			const lab = document.getElementById("dol-crime-val-" + c.key);
+			if (!el || !v.crime || !v.crime[c.key]) continue;
+			el.max = cmax;
+			const raw = typeof v.crime[c.key].current === "number" ? v.crime[c.key].current : 0;
+			el.value = Math.min(Math.max(0, raw), cmax);
+			if (lab) lab.textContent = Math.round(raw);
+		}
+
 		if (status) {
 			const locked = v.feats && v.feats.locked ? "LOCKED" : "ok";
 			const cheats = v.cheatsEnabled ? "ON" : "off";
@@ -173,9 +318,10 @@
 	const btnRow = document.createElement("div");
 	btnRow.style.cssText = "display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap";
 
-	const mkBtn = (label, fn, title) => {
+	const mkBtn = (label, fn, title, id) => {
 		const b = document.createElement("button");
 		b.textContent = label;
+		if (id) b.id = id;
 		b.title = title || "";
 		Object.assign(b.style, {
 			flex: "1",
@@ -187,17 +333,19 @@
 			color: "#eee",
 			cursor: "pointer",
 		});
-		b.onmouseenter = () => (b.style.background = "#3a3a48");
-		b.onmouseleave = () => (b.style.background = "#2a2a32");
+		b.onmouseenter = () => {
+			if (!b.dataset.lockedHover) b.style.background = "#3a3a48";
+		};
+		b.onmouseleave = () => {
+			if (!b.dataset.lockedHover) b.style.background = "#2a2a32";
+		};
 		b.onclick = fn;
 		return b;
 	};
 
-	/** Re-bind to current V + refresh sliders (fixes post time-pass freeze) */
 	const reconnect = () => {
 		const ok = syncFromGame();
 		if (ok) {
-			// Ensure panel still on top of DOM after heavy re-renders
 			if (!document.body.contains(root)) document.body.appendChild(root);
 			console.log("[DoL Panel] Reconnected to live State.variables");
 		} else {
@@ -206,15 +354,23 @@
 	};
 
 	btnRow.append(
-		mkBtn("Reconnect", reconnect, "Re-grab live variables after time passes / if sliders feel dead"),
-		mkBtn("Sync UI", () => {
-			gameRefresh();
-			syncFromGame();
-		}, "Push clamp + sidebar redraw, then re-read values")
+		mkBtn(
+			"Reconnect",
+			reconnect,
+			"Re-grab live variables after time passes / if sliders feel dead"
+		),
+		mkBtn(
+			"Sync UI",
+			() => {
+				gameRefresh();
+				syncFromGame();
+			},
+			"Push clamp + sidebar redraw, then re-read values"
+		)
 	);
 	root.appendChild(btnRow);
 
-	// Money
+	// Money + infinite spray
 	{
 		const row = document.createElement("div");
 		row.style.marginBottom = "10px";
@@ -248,10 +404,35 @@
 		num.style.cssText =
 			"width:100%;margin-top:4px;box-sizing:border-box;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:4px";
 		num.onchange = () => setMoneyPounds(num.value);
-		row.append(input, num);
+
+		const sprayBtn = mkBtn(
+			"Infinite spray: OFF",
+			() => {
+				const v = getV();
+				if (!v) return reconnect();
+				// Match in-game cheat: on → spray 5 + flag; off → clear flag
+				if (v.infinitespray) {
+					v.infinitespray = 0;
+				} else {
+					try {
+						if (typeof Wikifier !== "undefined") Wikifier.wikifyEval("<<spray 5>>");
+					} catch (_) {}
+					v.infinitespray = 1;
+				}
+				syncFromGame();
+			},
+			"Same as cheat menu Infinite spray — does not enable official cheats",
+			"dol-spray-btn"
+		);
+		sprayBtn.style.marginTop = "8px";
+		sprayBtn.style.width = "100%";
+		sprayBtn.style.flex = "none";
+
+		row.append(input, num, sprayBtn);
 		root.appendChild(row);
 	}
 
+	// State section
 	const stateHead = document.createElement("div");
 	stateHead.textContent = "State";
 	stateHead.style.cssText = "font-weight:700;color:#d4a017;margin:4px 0 6px";
@@ -270,7 +451,6 @@
 		sl.min = 0;
 		sl.step = 1;
 		sl.style.width = "100%";
-		// Live write every input using FRESH getV() — not a cached snapshot
 		sl.oninput = () => {
 			const v = getV();
 			if (!v) return reconnect();
@@ -283,10 +463,59 @@
 		root.appendChild(row);
 	}
 
+	// --- Crime: collapsible / dockable section ---
+	const crimeWrap = document.createElement("div");
+	crimeWrap.style.cssText = "margin-top:10px;border-top:1px solid #444;padding-top:8px";
+
+	const crimeToggle = document.createElement("button");
+	crimeToggle.type = "button";
+	crimeToggle.id = "dol-crime-toggle";
+	crimeToggle.setAttribute("aria-expanded", "false");
+	Object.assign(crimeToggle.style, {
+		width: "100%",
+		display: "flex",
+		justifyContent: "space-between",
+		alignItems: "center",
+		padding: "8px 10px",
+		borderRadius: "6px",
+		border: "1px solid #666",
+		background: "#252530",
+		color: "#eee",
+		cursor: "pointer",
+		font: "inherit",
+		fontWeight: "700",
+	});
+	const crimeToggleLabel = document.createElement("span");
+	crimeToggleLabel.innerHTML = 'Crime <small style="font-weight:400;opacity:.7">(dock)</small>';
+	const crimeChevron = document.createElement("span");
+	crimeChevron.id = "dol-crime-chevron";
+	crimeChevron.textContent = "▸";
+	crimeToggle.append(crimeToggleLabel, crimeChevron);
+
+	const crimeBody = document.createElement("div");
+	crimeBody.id = "dol-crime-body";
+	crimeBody.style.cssText = "display:none;margin-top:10px";
+
+	const setCrimeOpen = (open) => {
+		crimeBody.style.display = open ? "block" : "none";
+		crimeToggle.setAttribute("aria-expanded", open ? "true" : "false");
+		crimeChevron.textContent = open ? "▾" : "▸";
+		crimeToggle.style.borderColor = open ? "#8a6" : "#666";
+		if (open) syncFromGame();
+	};
+
+	crimeToggle.onclick = () => {
+		const open = crimeToggle.getAttribute("aria-expanded") !== "true";
+		setCrimeOpen(open);
+	};
+
+	crimeWrap.append(crimeToggle, crimeBody);
+	root.appendChild(crimeWrap);
+
 	const foot = document.createElement("div");
-	foot.style.cssText = "font-size:10px;opacity:.65;margin-top:6px";
+	foot.style.cssText = "font-size:10px;opacity:.65;margin-top:8px";
 	foot.textContent =
-		"Auto-reconnects after each passage. If a slider feels dead, hit Reconnect. Never enable in-game Cheat mode.";
+		"Crime starts collapsed. Spray can still raise crime in-combat — zero it under Crime. Never enable in-game Cheat mode.";
 	root.appendChild(foot);
 
 	// Drag
@@ -307,22 +536,18 @@
 	window.addEventListener("mousemove", onMouseMove);
 	window.addEventListener("mouseup", onMouseUp);
 
-	// Auto re-sync when the game advances (time pass, links, etc.)
 	const onPassage = () => {
-		// Defer one tick so State.variables is the new moment
 		setTimeout(reconnect, 0);
 	};
 	const $doc = window.jQuery ? window.jQuery(document) : null;
 	if ($doc) {
 		$doc.on(":passagerender.dolStatPanel :passagedisplay.dolStatPanel", onPassage);
 	}
-	// Fallback polling if events miss (every 2s, cheap)
 	const poll = setInterval(() => {
 		if (!document.getElementById(PANEL_ID)) {
 			clearInterval(poll);
 			return;
 		}
-		// Only refresh labels if still connected; don't fight active dragging
 		if (document.activeElement && document.activeElement.tagName === "INPUT") return;
 		syncFromGame();
 	}, 2000);
@@ -335,6 +560,7 @@
 		root.remove();
 		delete window.__dolStatPanel;
 		delete window.__dolStatPanelRemove;
+		delete window.__dolStatPanelReconnect;
 	};
 
 	closeBtn.onclick = removeAll;
@@ -345,6 +571,6 @@
 	document.body.appendChild(root);
 	reconnect();
 	console.log(
-		"[DoL Panel] Ready (live rebind). Money is pence under the hood. Use Reconnect if needed; auto-sync after passages."
+		"[DoL Panel] Ready. Crime section is collapsible. Infinite spray toggle included. Live rebind on."
 	);
 })();

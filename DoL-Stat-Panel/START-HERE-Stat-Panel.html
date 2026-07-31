@@ -72,7 +72,7 @@
 </head>
 <body>
   <h1>DoL Stat Panel</h1>
-  <p class="sub">Money + state sliders without official cheats. Survives time-pass via live rebind.</p>
+  <p class="sub">Money, state, crime (collapsible), infinite spray — no official cheats / feats lock.</p>
 
   <div class="warn">
     <strong>Do not double-click <code>dol-stat-panel.js</code></strong> — Windows Script Host will error.
@@ -86,7 +86,7 @@
       <li>Press <kbd>F12</kbd> → <strong>Console</strong></li>
       <li>Click <strong>Copy script</strong> below → click console → <kbd>Ctrl</kbd>+<kbd>V</kbd> → <kbd>Enter</kbd></li>
     </ol>
-    Panel appears top-right. After time passes it should keep working; if not, hit <strong>Reconnect</strong>.
+    Panel top-right. <strong>Crime</strong> is a collapsible dock section. Hit <strong>Reconnect</strong> if needed.
   </div>
 
   <p>
@@ -98,301 +98,21 @@
   <textarea id="code" readonly spellcheck="false"></textarea>
 
 <script>
-const SCRIPT = String.raw`(() => {
-	const PANEL_ID = "dol-stat-panel";
-
-	const getV = () => {
-		if (typeof V !== "undefined" && V != null && typeof V.money === "number") return V;
-		try {
-			const vars = window.SugarCube && window.SugarCube.State && window.SugarCube.State.variables;
-			if (vars && typeof vars.money === "number") return vars;
-		} catch (_) {}
-		return null;
-	};
-
-	if (!getV()) {
-		console.error("[DoL Panel] No game state. Load a save first, then re-paste.");
-		return;
-	}
-
-	if (typeof window.__dolStatPanelRemove === "function") {
-		try { window.__dolStatPanelRemove(); } catch (_) {}
-	}
-
-	const STATE = [
-		{ key: "pain", label: "Pain", max: 200 },
-		{ key: "arousal", label: "Arousal", max: 10000 },
-		{ key: "tiredness", label: "Fatigue", max: 2000 },
-		{ key: "stress", label: "Stress", max: (v) => v.stressmax || 10000 },
-		{ key: "trauma", label: "Trauma", max: (v) => v.traumamax || 5000 },
-		{ key: "control", label: "Control", max: (v) => v.controlmax || 1000 },
-		{ key: "drunk", label: "Alcohol", max: 1000 },
-		{ key: "drugged", label: "Drugs", max: 1000 },
-		{ key: "hallucinogen", label: "Hallucinogens", max: 1000 },
-	];
-
-	const maxOf = (s, v) => (typeof s.max === "function" ? s.max(v) : s.max);
-
-	const gameRefresh = () => {
-		try {
-			if (typeof Wikifier !== "undefined") {
-				Wikifier.wikifyEval("<<clamp>><<updatesidebarimg>><<updatesidebarmoney>>");
-			} else if (typeof updateSideBarMoney === "function") {
-				updateSideBarMoney();
-			}
-		} catch (e) {
-			console.warn("[DoL Panel] UI refresh partial:", e);
-		}
-	};
-
-	const syncFromGame = () => {
-		const v = getV();
-		const status = document.getElementById("dol-status");
-		if (!v) {
-			if (status) {
-				status.textContent = "disconnected — load a save, then hit Reconnect";
-				status.style.color = "#f66";
-			}
-			return false;
-		}
-		for (const s of STATE) {
-			const el = document.getElementById("dol-sl-" + s.key);
-			const lab = document.getElementById("dol-val-" + s.key);
-			if (!el) continue;
-			const m = maxOf(s, v);
-			el.max = m;
-			const raw = typeof v[s.key] === "number" ? v[s.key] : 0;
-			el.value = Math.min(Math.max(0, raw), m);
-			if (lab) lab.textContent = Math.round(raw);
-		}
-		const moneyEl = document.getElementById("dol-money");
-		const moneyLab = document.getElementById("dol-money-val");
-		const moneyNum = document.getElementById("dol-money-num");
-		if (moneyEl && typeof v.money === "number") {
-			const pounds = Math.floor(v.money / 100);
-			moneyEl.value = Math.min(Number(moneyEl.max), Math.max(0, pounds));
-			if (moneyLab) moneyLab.textContent = "£" + pounds.toLocaleString("en-GB");
-			if (moneyNum && document.activeElement !== moneyNum) moneyNum.value = pounds;
-		}
-		if (status) {
-			const locked = v.feats && v.feats.locked ? "LOCKED" : "ok";
-			const cheats = v.cheatsEnabled ? "ON" : "off";
-			status.textContent = "live | feats: " + locked + " | cheats: " + cheats;
-			status.style.color = (v.feats && v.feats.locked) || v.cheatsEnabled ? "#f66" : "#6f6";
-		}
-		return true;
-	};
-
-	const setStat = (key, value) => {
-		const v = getV();
-		if (!v) { syncFromGame(); return; }
-		v[key] = Number(value);
-		gameRefresh();
-		syncFromGame();
-	};
-
-	const setMoneyPounds = (pounds) => {
-		const v = getV();
-		if (!v) { syncFromGame(); return; }
-		v.money = Math.max(0, Number(pounds) || 0) * 100;
-		gameRefresh();
-		syncFromGame();
-	};
-
-	const root = document.createElement("div");
-	root.id = PANEL_ID;
-	Object.assign(root.style, {
-		position: "fixed", top: "12px", right: "12px", zIndex: "2147483647",
-		width: "300px", maxHeight: "90vh", overflow: "auto",
-		background: "rgba(18,18,22,0.94)", color: "#eee",
-		font: "13px/1.35 system-ui,Segoe UI,sans-serif",
-		border: "1px solid #555", borderRadius: "10px",
-		boxShadow: "0 8px 28px rgba(0,0,0,.45)",
-		padding: "10px 12px 12px", userSelect: "none",
-	});
-
-	const head = document.createElement("div");
-	Object.assign(head.style, {
-		display: "flex", justifyContent: "space-between", alignItems: "center",
-		marginBottom: "8px", cursor: "move", fontWeight: "700",
-	});
-	head.innerHTML = '<span>DoL Stats <small style="font-weight:400;opacity:.7">(no feats lock)</small></span>';
-	const closeBtn = document.createElement("button");
-	closeBtn.textContent = "X";
-	Object.assign(closeBtn.style, {
-		background: "transparent", border: "none", color: "#ccc",
-		fontSize: "16px", cursor: "pointer",
-	});
-	head.appendChild(closeBtn);
-	root.appendChild(head);
-
-	const status = document.createElement("div");
-	status.id = "dol-status";
-	status.style.cssText = "font-size:11px;margin-bottom:8px;opacity:.9";
-	root.appendChild(status);
-
-	const btnRow = document.createElement("div");
-	btnRow.style.cssText = "display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap";
-
-	const mkBtn = (label, fn, title) => {
-		const b = document.createElement("button");
-		b.textContent = label;
-		b.title = title || "";
-		Object.assign(b.style, {
-			flex: "1", minWidth: "90px", padding: "6px 8px", borderRadius: "6px",
-			border: "1px solid #666", background: "#2a2a32", color: "#eee", cursor: "pointer",
-		});
-		b.onmouseenter = () => (b.style.background = "#3a3a48");
-		b.onmouseleave = () => (b.style.background = "#2a2a32");
-		b.onclick = fn;
-		return b;
-	};
-
-	const reconnect = () => {
-		const ok = syncFromGame();
-		if (ok) {
-			if (!document.body.contains(root)) document.body.appendChild(root);
-			console.log("[DoL Panel] Reconnected to live State.variables");
-		} else {
-			console.warn("[DoL Panel] Reconnect failed — no V yet");
-		}
-	};
-
-	btnRow.append(
-		mkBtn("Reconnect", reconnect, "Re-grab live variables after time passes"),
-		mkBtn("Sync UI", () => { gameRefresh(); syncFromGame(); }, "Sidebar redraw + re-read")
-	);
-	root.appendChild(btnRow);
-
-	{
-		const row = document.createElement("div");
-		row.style.marginBottom = "10px";
-		row.innerHTML = '<div style="display:flex;justify-content:space-between"><b>Money</b><span id="dol-money-val"></span></div>';
-		const input = document.createElement("input");
-		input.id = "dol-money";
-		input.type = "range";
-		input.min = 0;
-		input.max = 1000000;
-		input.step = 100;
-		input.style.width = "100%";
-		input.oninput = () => {
-			const v = getV();
-			if (!v) return reconnect();
-			v.money = Number(input.value) * 100;
-			const moneyLab = document.getElementById("dol-money-val");
-			if (moneyLab) moneyLab.textContent = "£" + Math.floor(v.money / 100).toLocaleString("en-GB");
-			const moneyNum = document.getElementById("dol-money-num");
-			if (moneyNum) moneyNum.value = Math.floor(v.money / 100);
-		};
-		input.onchange = () => setMoneyPounds(input.value);
-		const num = document.createElement("input");
-		num.id = "dol-money-num";
-		num.type = "number";
-		num.min = 0;
-		num.step = 100;
-		num.placeholder = "£ exact";
-		num.style.cssText = "width:100%;margin-top:4px;box-sizing:border-box;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:4px";
-		num.onchange = () => setMoneyPounds(num.value);
-		row.append(input, num);
-		root.appendChild(row);
-	}
-
-	const stateHead = document.createElement("div");
-	stateHead.textContent = "State";
-	stateHead.style.cssText = "font-weight:700;color:#d4a017;margin:4px 0 6px";
-	root.appendChild(stateHead);
-
-	for (const s of STATE) {
-		const row = document.createElement("div");
-		row.style.marginBottom = "8px";
-		const top = document.createElement("div");
-		top.style.cssText = "display:flex;justify-content:space-between";
-		top.innerHTML = "<span>" + s.label + '</span><span id="dol-val-' + s.key + '">0</span>';
-		const sl = document.createElement("input");
-		sl.type = "range";
-		sl.id = "dol-sl-" + s.key;
-		sl.min = 0;
-		sl.step = 1;
-		sl.style.width = "100%";
-		sl.oninput = () => {
-			const v = getV();
-			if (!v) return reconnect();
-			v[s.key] = Number(sl.value);
-			const lab = document.getElementById("dol-val-" + s.key);
-			if (lab) lab.textContent = Math.round(v[s.key]);
-		};
-		sl.onchange = () => setStat(s.key, sl.value);
-		row.append(top, sl);
-		root.appendChild(row);
-	}
-
-	const foot = document.createElement("div");
-	foot.style.cssText = "font-size:10px;opacity:.65;margin-top:6px";
-	foot.textContent = "Auto-reconnects after each passage. If a slider feels dead, hit Reconnect. Never enable in-game Cheat mode.";
-	root.appendChild(foot);
-
-	let drag = null;
-	const onMouseMove = (e) => {
-		if (!drag) return;
-		root.style.left = e.clientX - drag.x + "px";
-		root.style.top = e.clientY - drag.y + "px";
-		root.style.right = "auto";
-	};
-	const onMouseUp = () => { drag = null; };
-	head.addEventListener("mousedown", (e) => {
-		if (e.target === closeBtn) return;
-		drag = { x: e.clientX - root.offsetLeft, y: e.clientY - root.offsetTop };
-	});
-	window.addEventListener("mousemove", onMouseMove);
-	window.addEventListener("mouseup", onMouseUp);
-
-	const onPassage = () => { setTimeout(reconnect, 0); };
-	const $doc = window.jQuery ? window.jQuery(document) : null;
-	if ($doc) {
-		$doc.on(":passagerender.dolStatPanel :passagedisplay.dolStatPanel", onPassage);
-	}
-	const poll = setInterval(() => {
-		if (!document.getElementById(PANEL_ID)) { clearInterval(poll); return; }
-		if (document.activeElement && document.activeElement.tagName === "INPUT") return;
-		syncFromGame();
-	}, 2000);
-
-	const removeAll = () => {
-		if ($doc) $doc.off(".dolStatPanel");
-		clearInterval(poll);
-		window.removeEventListener("mousemove", onMouseMove);
-		window.removeEventListener("mouseup", onMouseUp);
-		root.remove();
-		delete window.__dolStatPanel;
-		delete window.__dolStatPanelRemove;
-	};
-
-	closeBtn.onclick = removeAll;
-	window.__dolStatPanelRemove = removeAll;
-	window.__dolStatPanel = root;
-	window.__dolStatPanelReconnect = reconnect;
-
-	document.body.appendChild(root);
-	reconnect();
-	console.log("[DoL Panel] Ready (live rebind). Use Reconnect if needed; auto-sync after passages.");
-})();`;
-
+const SCRIPT = "/**\n * DoL Stat Panel \u2014 console cheat UI without enabling official cheats.\n * Does NOT set V.cheatsEnabled or V.feats.locked (feats stay earnable).\n *\n * Usage: open the game, load a save, F12 \u2192 Console \u2192 paste this whole file \u2192 Enter.\n * Prefer: open START-HERE-Stat-Panel.html \u2192 Copy \u2192 paste into game console.\n *\n * Close: click X, or run: window.__dolStatPanelRemove && window.__dolStatPanelRemove()\n */\n(() => {\n\tconst PANEL_ID = \"dol-stat-panel\";\n\n\tconst getV = () => {\n\t\tif (typeof V !== \"undefined\" && V != null && typeof V.money === \"number\") return V;\n\t\ttry {\n\t\t\tconst vars = window.SugarCube && window.SugarCube.State && window.SugarCube.State.variables;\n\t\t\tif (vars && typeof vars.money === \"number\") return vars;\n\t\t} catch (_) {}\n\t\treturn null;\n\t};\n\n\tconst getSetup = () => {\n\t\ttry {\n\t\t\tif (typeof setup !== \"undefined\" && setup) return setup;\n\t\t\tif (window.SugarCube && window.SugarCube.setup) return window.SugarCube.setup;\n\t\t} catch (_) {}\n\t\treturn null;\n\t};\n\n\tif (!getV()) {\n\t\tconsole.error(\"[DoL Panel] No game state. Load a save first, then re-paste.\");\n\t\treturn;\n\t}\n\n\tif (typeof window.__dolStatPanelRemove === \"function\") {\n\t\ttry {\n\t\t\twindow.__dolStatPanelRemove();\n\t\t} catch (_) {}\n\t}\n\n\tconst STATE = [\n\t\t{ key: \"pain\", label: \"Pain\", max: 200 },\n\t\t{ key: \"arousal\", label: \"Arousal\", max: 10000 },\n\t\t{ key: \"tiredness\", label: \"Fatigue\", max: 2000 },\n\t\t{ key: \"stress\", label: \"Stress\", max: (v) => v.stressmax || 10000 },\n\t\t{ key: \"trauma\", label: \"Trauma\", max: (v) => v.traumamax || 5000 },\n\t\t{ key: \"control\", label: \"Control\", max: (v) => v.controlmax || 1000 },\n\t\t{ key: \"drunk\", label: \"Alcohol\", max: 1000 },\n\t\t{ key: \"drugged\", label: \"Drugs\", max: 1000 },\n\t\t{ key: \"hallucinogen\", label: \"Hallucinogens\", max: 1000 },\n\t];\n\n\tconst CRIME_FALLBACK = {\n\t\tassault: \"Assault\",\n\t\tcoercion: \"Coercion\",\n\t\tdestruction: \"Destruction of property\",\n\t\texposure: \"Indecent exposure\",\n\t\tobstruction: \"Obstruction of justice\",\n\t\tprostitution: \"Prostitution\",\n\t\tresisting: \"Resisting arrest\",\n\t\tthievery: \"Thievery\",\n\t\tpetty: \"Petty thievery\",\n\t\ttrespassing: \"Trespassing\",\n\t};\n\n\tconst titleCase = (s) =>\n\t\tString(s || \"\")\n\t\t\t.split(\" \")\n\t\t\t.map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))\n\t\t\t.join(\" \");\n\n\tconst crimeList = () => {\n\t\tconst s = getSetup();\n\t\tconst names = (s && s.crimeNames) || CRIME_FALLBACK;\n\t\treturn Object.keys(names).map((key) => ({\n\t\t\tkey,\n\t\t\tlabel: titleCase(names[key] || CRIME_FALLBACK[key] || key),\n\t\t}));\n\t};\n\n\tconst crimeMax = () => {\n\t\ttry {\n\t\t\tif (typeof C !== \"undefined\" && C.crime && typeof C.crime.max === \"number\") return C.crime.max;\n\t\t} catch (_) {}\n\t\treturn 10000;\n\t};\n\n\tconst maxOf = (s, v) => (typeof s.max === \"function\" ? s.max(v) : s.max);\n\n\tconst gameRefresh = () => {\n\t\ttry {\n\t\t\tif (typeof Wikifier !== \"undefined\") {\n\t\t\t\tWikifier.wikifyEval(\"<<clamp>><<updatesidebarimg>><<updatesidebarmoney>>\");\n\t\t\t} else if (typeof updateSideBarMoney === \"function\") {\n\t\t\t\tupdateSideBarMoney();\n\t\t\t}\n\t\t} catch (e) {\n\t\t\tconsole.warn(\"[DoL Panel] UI refresh partial:\", e);\n\t\t}\n\t};\n\n\tconst ensureCrimeSliders = () => {\n\t\tconst body = document.getElementById(\"dol-crime-body\");\n\t\tif (!body) return;\n\t\tconst list = crimeList();\n\t\tconst existing = new Set(\n\t\t\t[...body.querySelectorAll(\"[data-crime-key]\")].map((el) => el.getAttribute(\"data-crime-key\"))\n\t\t);\n\t\t// If keys mismatch (first paint / update), rebuild\n\t\tconst want = list.map((c) => c.key).join(\",\");\n\t\tif (body.dataset.keys === want) return;\n\t\tbody.dataset.keys = want;\n\t\tbody.innerHTML = \"\";\n\n\t\tconst zeroRow = document.createElement(\"div\");\n\t\tzeroRow.style.cssText = \"display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap\";\n\t\tconst zeroBtn = document.createElement(\"button\");\n\t\tzeroBtn.textContent = \"Zero all crime\";\n\t\tzeroBtn.title = \"Set every crime.current (and daily) to 0\";\n\t\tObject.assign(zeroBtn.style, {\n\t\t\tflex: \"1\",\n\t\t\tpadding: \"6px 8px\",\n\t\t\tborderRadius: \"6px\",\n\t\t\tborder: \"1px solid #666\",\n\t\t\tbackground: \"#2a2a32\",\n\t\t\tcolor: \"#eee\",\n\t\t\tcursor: \"pointer\",\n\t\t});\n\t\tzeroBtn.onclick = () => {\n\t\t\tconst v = getV();\n\t\t\tif (!v || !v.crime) return reconnect();\n\t\t\tfor (const c of list) {\n\t\t\t\tif (!v.crime[c.key]) continue;\n\t\t\t\tv.crime[c.key].current = 0;\n\t\t\t\tif (typeof v.crime[c.key].daily === \"number\") v.crime[c.key].daily = 0;\n\t\t\t}\n\t\t\tgameRefresh();\n\t\t\tsyncFromGame();\n\t\t};\n\t\tzeroRow.appendChild(zeroBtn);\n\t\tbody.appendChild(zeroRow);\n\n\t\tfor (const c of list) {\n\t\t\tconst row = document.createElement(\"div\");\n\t\t\trow.style.marginBottom = \"8px\";\n\t\t\trow.setAttribute(\"data-crime-key\", c.key);\n\t\t\tconst top = document.createElement(\"div\");\n\t\t\ttop.style.cssText = \"display:flex;justify-content:space-between\";\n\t\t\ttop.innerHTML =\n\t\t\t\t\"<span>\" +\n\t\t\t\tc.label +\n\t\t\t\t'</span><span id=\"dol-crime-val-' +\n\t\t\t\tc.key +\n\t\t\t\t'\">0</span>';\n\t\t\tconst sl = document.createElement(\"input\");\n\t\t\tsl.type = \"range\";\n\t\t\tsl.id = \"dol-crime-sl-\" + c.key;\n\t\t\tsl.min = 0;\n\t\t\tsl.max = crimeMax();\n\t\t\tsl.step = 10;\n\t\t\tsl.style.width = \"100%\";\n\t\t\tsl.oninput = () => {\n\t\t\t\tconst v = getV();\n\t\t\t\tif (!v || !v.crime || !v.crime[c.key]) return reconnect();\n\t\t\t\tv.crime[c.key].current = Number(sl.value);\n\t\t\t\tconst lab = document.getElementById(\"dol-crime-val-\" + c.key);\n\t\t\t\tif (lab) lab.textContent = Math.round(v.crime[c.key].current);\n\t\t\t};\n\t\t\tsl.onchange = () => {\n\t\t\t\tconst v = getV();\n\t\t\t\tif (!v || !v.crime || !v.crime[c.key]) return reconnect();\n\t\t\t\tv.crime[c.key].current = Number(sl.value);\n\t\t\t\t// keep count consistent with official setter rules\n\t\t\t\tif (v.crime[c.key].current === 0) v.crime[c.key].count = 0;\n\t\t\t\telse if (!v.crime[c.key].count) v.crime[c.key].count = 1;\n\t\t\t\tgameRefresh();\n\t\t\t\tsyncFromGame();\n\t\t\t};\n\t\t\trow.append(top, sl);\n\t\t\tbody.appendChild(row);\n\t\t}\n\t};\n\n\tconst syncFromGame = () => {\n\t\tconst v = getV();\n\t\tconst status = document.getElementById(\"dol-status\");\n\t\tif (!v) {\n\t\t\tif (status) {\n\t\t\t\tstatus.textContent = \"disconnected \u2014 load a save, then hit Reconnect\";\n\t\t\t\tstatus.style.color = \"#f66\";\n\t\t\t}\n\t\t\treturn false;\n\t\t}\n\n\t\tensureCrimeSliders();\n\n\t\tfor (const s of STATE) {\n\t\t\tconst el = document.getElementById(\"dol-sl-\" + s.key);\n\t\t\tconst lab = document.getElementById(\"dol-val-\" + s.key);\n\t\t\tif (!el) continue;\n\t\t\tconst m = maxOf(s, v);\n\t\t\tel.max = m;\n\t\t\tconst raw = typeof v[s.key] === \"number\" ? v[s.key] : 0;\n\t\t\tel.value = Math.min(Math.max(0, raw), m);\n\t\t\tif (lab) lab.textContent = Math.round(raw);\n\t\t}\n\n\t\tconst moneyEl = document.getElementById(\"dol-money\");\n\t\tconst moneyLab = document.getElementById(\"dol-money-val\");\n\t\tconst moneyNum = document.getElementById(\"dol-money-num\");\n\t\tif (moneyEl && typeof v.money === \"number\") {\n\t\t\tconst pounds = Math.floor(v.money / 100);\n\t\t\tmoneyEl.value = Math.min(Number(moneyEl.max), Math.max(0, pounds));\n\t\t\tif (moneyLab) moneyLab.textContent = \"\u00a3\" + pounds.toLocaleString(\"en-GB\");\n\t\t\tif (moneyNum && document.activeElement !== moneyNum) moneyNum.value = pounds;\n\t\t}\n\n\t\t// Infinite pepper spray\n\t\tconst sprayBtn = document.getElementById(\"dol-spray-btn\");\n\t\tif (sprayBtn) {\n\t\t\tconst on = !!v.infinitespray;\n\t\t\tsprayBtn.textContent = on ? \"Infinite spray: ON\" : \"Infinite spray: OFF\";\n\t\t\tsprayBtn.style.borderColor = on ? \"#6a6\" : \"#666\";\n\t\t\tsprayBtn.style.color = on ? \"#9f9\" : \"#eee\";\n\t\t}\n\n\t\t// Crime\n\t\tconst cmax = crimeMax();\n\t\tfor (const c of crimeList()) {\n\t\t\tconst el = document.getElementById(\"dol-crime-sl-\" + c.key);\n\t\t\tconst lab = document.getElementById(\"dol-crime-val-\" + c.key);\n\t\t\tif (!el || !v.crime || !v.crime[c.key]) continue;\n\t\t\tel.max = cmax;\n\t\t\tconst raw = typeof v.crime[c.key].current === \"number\" ? v.crime[c.key].current : 0;\n\t\t\tel.value = Math.min(Math.max(0, raw), cmax);\n\t\t\tif (lab) lab.textContent = Math.round(raw);\n\t\t}\n\n\t\tif (status) {\n\t\t\tconst locked = v.feats && v.feats.locked ? \"LOCKED\" : \"ok\";\n\t\t\tconst cheats = v.cheatsEnabled ? \"ON\" : \"off\";\n\t\t\tstatus.textContent = \"live | feats: \" + locked + \" | cheats: \" + cheats;\n\t\t\tstatus.style.color = (v.feats && v.feats.locked) || v.cheatsEnabled ? \"#f66\" : \"#6f6\";\n\t\t}\n\t\treturn true;\n\t};\n\n\tconst setStat = (key, value) => {\n\t\tconst v = getV();\n\t\tif (!v) {\n\t\t\tsyncFromGame();\n\t\t\treturn;\n\t\t}\n\t\tv[key] = Number(value);\n\t\tgameRefresh();\n\t\tsyncFromGame();\n\t};\n\n\tconst setMoneyPounds = (pounds) => {\n\t\tconst v = getV();\n\t\tif (!v) {\n\t\t\tsyncFromGame();\n\t\t\treturn;\n\t\t}\n\t\tv.money = Math.max(0, Number(pounds) || 0) * 100;\n\t\tgameRefresh();\n\t\tsyncFromGame();\n\t};\n\n\tconst root = document.createElement(\"div\");\n\troot.id = PANEL_ID;\n\tObject.assign(root.style, {\n\t\tposition: \"fixed\",\n\t\ttop: \"12px\",\n\t\tright: \"12px\",\n\t\tzIndex: \"2147483647\",\n\t\twidth: \"300px\",\n\t\tmaxHeight: \"90vh\",\n\t\toverflow: \"auto\",\n\t\tbackground: \"rgba(18,18,22,0.94)\",\n\t\tcolor: \"#eee\",\n\t\tfont: \"13px/1.35 system-ui,Segoe UI,sans-serif\",\n\t\tborder: \"1px solid #555\",\n\t\tborderRadius: \"10px\",\n\t\tboxShadow: \"0 8px 28px rgba(0,0,0,.45)\",\n\t\tpadding: \"10px 12px 12px\",\n\t\tuserSelect: \"none\",\n\t});\n\n\tconst head = document.createElement(\"div\");\n\tObject.assign(head.style, {\n\t\tdisplay: \"flex\",\n\t\tjustifyContent: \"space-between\",\n\t\talignItems: \"center\",\n\t\tmarginBottom: \"8px\",\n\t\tcursor: \"move\",\n\t\tfontWeight: \"700\",\n\t});\n\thead.innerHTML =\n\t\t'<span>DoL Stats <small style=\"font-weight:400;opacity:.7\">(no feats lock)</small></span>';\n\tconst closeBtn = document.createElement(\"button\");\n\tcloseBtn.textContent = \"X\";\n\tObject.assign(closeBtn.style, {\n\t\tbackground: \"transparent\",\n\t\tborder: \"none\",\n\t\tcolor: \"#ccc\",\n\t\tfontSize: \"16px\",\n\t\tcursor: \"pointer\",\n\t});\n\thead.appendChild(closeBtn);\n\troot.appendChild(head);\n\n\tconst status = document.createElement(\"div\");\n\tstatus.id = \"dol-status\";\n\tstatus.style.cssText = \"font-size:11px;margin-bottom:8px;opacity:.9\";\n\troot.appendChild(status);\n\n\tconst btnRow = document.createElement(\"div\");\n\tbtnRow.style.cssText = \"display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap\";\n\n\tconst mkBtn = (label, fn, title, id) => {\n\t\tconst b = document.createElement(\"button\");\n\t\tb.textContent = label;\n\t\tif (id) b.id = id;\n\t\tb.title = title || \"\";\n\t\tObject.assign(b.style, {\n\t\t\tflex: \"1\",\n\t\t\tminWidth: \"90px\",\n\t\t\tpadding: \"6px 8px\",\n\t\t\tborderRadius: \"6px\",\n\t\t\tborder: \"1px solid #666\",\n\t\t\tbackground: \"#2a2a32\",\n\t\t\tcolor: \"#eee\",\n\t\t\tcursor: \"pointer\",\n\t\t});\n\t\tb.onmouseenter = () => {\n\t\t\tif (!b.dataset.lockedHover) b.style.background = \"#3a3a48\";\n\t\t};\n\t\tb.onmouseleave = () => {\n\t\t\tif (!b.dataset.lockedHover) b.style.background = \"#2a2a32\";\n\t\t};\n\t\tb.onclick = fn;\n\t\treturn b;\n\t};\n\n\tconst reconnect = () => {\n\t\tconst ok = syncFromGame();\n\t\tif (ok) {\n\t\t\tif (!document.body.contains(root)) document.body.appendChild(root);\n\t\t\tconsole.log(\"[DoL Panel] Reconnected to live State.variables\");\n\t\t} else {\n\t\t\tconsole.warn(\"[DoL Panel] Reconnect failed \u2014 no V yet\");\n\t\t}\n\t};\n\n\tbtnRow.append(\n\t\tmkBtn(\n\t\t\t\"Reconnect\",\n\t\t\treconnect,\n\t\t\t\"Re-grab live variables after time passes / if sliders feel dead\"\n\t\t),\n\t\tmkBtn(\n\t\t\t\"Sync UI\",\n\t\t\t() => {\n\t\t\t\tgameRefresh();\n\t\t\t\tsyncFromGame();\n\t\t\t},\n\t\t\t\"Push clamp + sidebar redraw, then re-read values\"\n\t\t)\n\t);\n\troot.appendChild(btnRow);\n\n\t// Money + infinite spray\n\t{\n\t\tconst row = document.createElement(\"div\");\n\t\trow.style.marginBottom = \"10px\";\n\t\trow.innerHTML =\n\t\t\t'<div style=\"display:flex;justify-content:space-between\"><b>Money</b><span id=\"dol-money-val\"></span></div>';\n\t\tconst input = document.createElement(\"input\");\n\t\tinput.id = \"dol-money\";\n\t\tinput.type = \"range\";\n\t\tinput.min = 0;\n\t\tinput.max = 1000000;\n\t\tinput.step = 100;\n\t\tinput.style.width = \"100%\";\n\t\tinput.oninput = () => {\n\t\t\tconst v = getV();\n\t\t\tif (!v) return reconnect();\n\t\t\tv.money = Number(input.value) * 100;\n\t\t\tconst moneyLab = document.getElementById(\"dol-money-val\");\n\t\t\tif (moneyLab)\n\t\t\t\tmoneyLab.textContent =\n\t\t\t\t\t\"\u00a3\" + Math.floor(v.money / 100).toLocaleString(\"en-GB\");\n\t\t\tconst moneyNum = document.getElementById(\"dol-money-num\");\n\t\t\tif (moneyNum) moneyNum.value = Math.floor(v.money / 100);\n\t\t};\n\t\tinput.onchange = () => setMoneyPounds(input.value);\n\t\tconst num = document.createElement(\"input\");\n\t\tnum.id = \"dol-money-num\";\n\t\tnum.type = \"number\";\n\t\tnum.min = 0;\n\t\tnum.step = 100;\n\t\tnum.placeholder = \"\u00a3 exact\";\n\t\tnum.style.cssText =\n\t\t\t\"width:100%;margin-top:4px;box-sizing:border-box;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:4px\";\n\t\tnum.onchange = () => setMoneyPounds(num.value);\n\n\t\tconst sprayBtn = mkBtn(\n\t\t\t\"Infinite spray: OFF\",\n\t\t\t() => {\n\t\t\t\tconst v = getV();\n\t\t\t\tif (!v) return reconnect();\n\t\t\t\t// Match in-game cheat: on \u2192 spray 5 + flag; off \u2192 clear flag\n\t\t\t\tif (v.infinitespray) {\n\t\t\t\t\tv.infinitespray = 0;\n\t\t\t\t} else {\n\t\t\t\t\ttry {\n\t\t\t\t\t\tif (typeof Wikifier !== \"undefined\") Wikifier.wikifyEval(\"<<spray 5>>\");\n\t\t\t\t\t} catch (_) {}\n\t\t\t\t\tv.infinitespray = 1;\n\t\t\t\t}\n\t\t\t\tsyncFromGame();\n\t\t\t},\n\t\t\t\"Same as cheat menu Infinite spray \u2014 does not enable official cheats\",\n\t\t\t\"dol-spray-btn\"\n\t\t);\n\t\tsprayBtn.style.marginTop = \"8px\";\n\t\tsprayBtn.style.width = \"100%\";\n\t\tsprayBtn.style.flex = \"none\";\n\n\t\trow.append(input, num, sprayBtn);\n\t\troot.appendChild(row);\n\t}\n\n\t// State section\n\tconst stateHead = document.createElement(\"div\");\n\tstateHead.textContent = \"State\";\n\tstateHead.style.cssText = \"font-weight:700;color:#d4a017;margin:4px 0 6px\";\n\troot.appendChild(stateHead);\n\n\tfor (const s of STATE) {\n\t\tconst row = document.createElement(\"div\");\n\t\trow.style.marginBottom = \"8px\";\n\t\tconst top = document.createElement(\"div\");\n\t\ttop.style.cssText = \"display:flex;justify-content:space-between\";\n\t\ttop.innerHTML =\n\t\t\t\"<span>\" + s.label + '</span><span id=\"dol-val-' + s.key + '\">0</span>';\n\t\tconst sl = document.createElement(\"input\");\n\t\tsl.type = \"range\";\n\t\tsl.id = \"dol-sl-\" + s.key;\n\t\tsl.min = 0;\n\t\tsl.step = 1;\n\t\tsl.style.width = \"100%\";\n\t\tsl.oninput = () => {\n\t\t\tconst v = getV();\n\t\t\tif (!v) return reconnect();\n\t\t\tv[s.key] = Number(sl.value);\n\t\t\tconst lab = document.getElementById(\"dol-val-\" + s.key);\n\t\t\tif (lab) lab.textContent = Math.round(v[s.key]);\n\t\t};\n\t\tsl.onchange = () => setStat(s.key, sl.value);\n\t\trow.append(top, sl);\n\t\troot.appendChild(row);\n\t}\n\n\t// --- Crime: collapsible / dockable section ---\n\tconst crimeWrap = document.createElement(\"div\");\n\tcrimeWrap.style.cssText = \"margin-top:10px;border-top:1px solid #444;padding-top:8px\";\n\n\tconst crimeToggle = document.createElement(\"button\");\n\tcrimeToggle.type = \"button\";\n\tcrimeToggle.id = \"dol-crime-toggle\";\n\tcrimeToggle.setAttribute(\"aria-expanded\", \"false\");\n\tObject.assign(crimeToggle.style, {\n\t\twidth: \"100%\",\n\t\tdisplay: \"flex\",\n\t\tjustifyContent: \"space-between\",\n\t\talignItems: \"center\",\n\t\tpadding: \"8px 10px\",\n\t\tborderRadius: \"6px\",\n\t\tborder: \"1px solid #666\",\n\t\tbackground: \"#252530\",\n\t\tcolor: \"#eee\",\n\t\tcursor: \"pointer\",\n\t\tfont: \"inherit\",\n\t\tfontWeight: \"700\",\n\t});\n\tconst crimeToggleLabel = document.createElement(\"span\");\n\tcrimeToggleLabel.innerHTML = 'Crime <small style=\"font-weight:400;opacity:.7\">(dock)</small>';\n\tconst crimeChevron = document.createElement(\"span\");\n\tcrimeChevron.id = \"dol-crime-chevron\";\n\tcrimeChevron.textContent = \"\u25b8\";\n\tcrimeToggle.append(crimeToggleLabel, crimeChevron);\n\n\tconst crimeBody = document.createElement(\"div\");\n\tcrimeBody.id = \"dol-crime-body\";\n\tcrimeBody.style.cssText = \"display:none;margin-top:10px\";\n\n\tconst setCrimeOpen = (open) => {\n\t\tcrimeBody.style.display = open ? \"block\" : \"none\";\n\t\tcrimeToggle.setAttribute(\"aria-expanded\", open ? \"true\" : \"false\");\n\t\tcrimeChevron.textContent = open ? \"\u25be\" : \"\u25b8\";\n\t\tcrimeToggle.style.borderColor = open ? \"#8a6\" : \"#666\";\n\t\tif (open) syncFromGame();\n\t};\n\n\tcrimeToggle.onclick = () => {\n\t\tconst open = crimeToggle.getAttribute(\"aria-expanded\") !== \"true\";\n\t\tsetCrimeOpen(open);\n\t};\n\n\tcrimeWrap.append(crimeToggle, crimeBody);\n\troot.appendChild(crimeWrap);\n\n\tconst foot = document.createElement(\"div\");\n\tfoot.style.cssText = \"font-size:10px;opacity:.65;margin-top:8px\";\n\tfoot.textContent =\n\t\t\"Crime starts collapsed. Spray can still raise crime in-combat \u2014 zero it under Crime. Never enable in-game Cheat mode.\";\n\troot.appendChild(foot);\n\n\t// Drag\n\tlet drag = null;\n\tconst onMouseMove = (e) => {\n\t\tif (!drag) return;\n\t\troot.style.left = e.clientX - drag.x + \"px\";\n\t\troot.style.top = e.clientY - drag.y + \"px\";\n\t\troot.style.right = \"auto\";\n\t};\n\tconst onMouseUp = () => {\n\t\tdrag = null;\n\t};\n\thead.addEventListener(\"mousedown\", (e) => {\n\t\tif (e.target === closeBtn) return;\n\t\tdrag = { x: e.clientX - root.offsetLeft, y: e.clientY - root.offsetTop };\n\t});\n\twindow.addEventListener(\"mousemove\", onMouseMove);\n\twindow.addEventListener(\"mouseup\", onMouseUp);\n\n\tconst onPassage = () => {\n\t\tsetTimeout(reconnect, 0);\n\t};\n\tconst $doc = window.jQuery ? window.jQuery(document) : null;\n\tif ($doc) {\n\t\t$doc.on(\":passagerender.dolStatPanel :passagedisplay.dolStatPanel\", onPassage);\n\t}\n\tconst poll = setInterval(() => {\n\t\tif (!document.getElementById(PANEL_ID)) {\n\t\t\tclearInterval(poll);\n\t\t\treturn;\n\t\t}\n\t\tif (document.activeElement && document.activeElement.tagName === \"INPUT\") return;\n\t\tsyncFromGame();\n\t}, 2000);\n\n\tconst removeAll = () => {\n\t\tif ($doc) $doc.off(\".dolStatPanel\");\n\t\tclearInterval(poll);\n\t\twindow.removeEventListener(\"mousemove\", onMouseMove);\n\t\twindow.removeEventListener(\"mouseup\", onMouseUp);\n\t\troot.remove();\n\t\tdelete window.__dolStatPanel;\n\t\tdelete window.__dolStatPanelRemove;\n\t\tdelete window.__dolStatPanelReconnect;\n\t};\n\n\tcloseBtn.onclick = removeAll;\n\twindow.__dolStatPanelRemove = removeAll;\n\twindow.__dolStatPanel = root;\n\twindow.__dolStatPanelReconnect = reconnect;\n\n\tdocument.body.appendChild(root);\n\treconnect();\n\tconsole.log(\n\t\t\"[DoL Panel] Ready. Crime section is collapsible. Infinite spray toggle included. Live rebind on.\"\n\t);\n})();\n";
 document.getElementById("code").value = SCRIPT;
-
 document.getElementById("copy").onclick = async () => {
-	const msg = document.getElementById("msg");
-	try {
-		await navigator.clipboard.writeText(SCRIPT);
-		msg.textContent = "Copied. Paste into the game console (F12).";
-	} catch {
-		document.getElementById("code").select();
-		document.execCommand("copy");
-		msg.textContent = "Copied (fallback). Paste into game console.";
-	}
+  const msg = document.getElementById("msg");
+  try {
+    await navigator.clipboard.writeText(SCRIPT);
+    msg.textContent = "Copied. Paste into the game console (F12).";
+  } catch {
+    document.getElementById("code").select();
+    document.execCommand("copy");
+    msg.textContent = "Copied (fallback). Paste into game console.";
+  }
 };
-
 document.getElementById("openGame").onclick = () => {
-	location.href = "Degrees of Lewdity 0.5.11.9.html";
+  location.href = "Degrees of Lewdity 0.5.11.9.html";
 };
 </script>
 </body>
