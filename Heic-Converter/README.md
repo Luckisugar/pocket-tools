@@ -1,31 +1,38 @@
-# Heic-Converter
+# HEIC Converter
 
-Convert iPhone **`.heic` / `.heif`** photos to **JPEG**, **PNG**, or **WebP** on Windows.
+iPhone **`.heic`** → **JPG / PNG / WebP** on Windows.
 
 ## What is HEIC?
 
-**HEIC** = High Efficiency Image Container. Apple’s default camera format since ~iPhone 7/8 era. Smaller than JPEG at similar quality. Windows, Discord, most websites, and a lot of apps **don’t open it** unless you install HEIF extensions or convert first.
+Apple’s High Efficiency Image format. Small files; most Windows apps won’t open them until converted.
 
-## Setup (once)
+## Run
+
+1. Double-click **`Convert-HEIC.bat`**
+2. Activity dock starts **collapsed**; Preflight + Clear Log live in that bar  
+3. Default quality **100**; pick HEIC files  
+4. **No** = save **next to each original** · **Yes** = other folder  
+5. Done dialog lists full paths
+
+## First-time deps
 
 ```powershell
 python -m pip install pillow pillow-heif
 ```
 
-## Use
+Preflight tells you if they’re missing.
 
-**GUI (easiest)**  
-Double-click `Convert-HEIC.bat`
-
-**Drag and drop**  
-Drop `.heic` files onto `Convert-HEIC.bat`
-
-**CLI**
+## CLI
 
 ```powershell
-python heic_convert.py IMG_7049.heic
-python heic_convert.py photo.heic -f png
-python heic_convert.py .\Photos -o .\converted -f jpg -q 92
+python heic_convert.py photo.heic
+python heic_convert.py .\album -o .\out -f png -q 92
 ```
 
-Default: JPG quality 92, next to the source file. EXIF orientation is applied so phone pics aren’t sideways.
+## Uninstall
+
+Delete this folder. Logs: `convert-log.txt`, language: `ui-language.txt` (both inside the tool).
+
+## Languages
+
+English + Português (BR) — first-run picker; saved in `ui-language.txt`.
