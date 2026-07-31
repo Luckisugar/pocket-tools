@@ -6,14 +6,14 @@ Edits money + state stats (pain, fatigue, stress, control, etc.) **without** tur
 
 ## Why not Cheat Engine?
 
-DoL is a browser JS game. Money lives in `V.money` (pence, not pounds). CE is the wrong tool.
+DoL is a browser JS game. CE is the wrong tool.
 
 ## Files
 
 | File | Role |
 |------|------|
-| `START-HERE-Stat-Panel.html` | Open this → **Copy script** button + instructions |
-| `dol-stat-panel.js` | Same script (paste into game console) |
+| `START-HERE-Stat-Panel.html` | Guide only. → **Copy script** button + instructions |
+| `dol-stat-panel.js` | Actual script (paste into game f12 console) |
 
 ## How to use
 
@@ -27,7 +27,7 @@ DoL is a browser JS game. Money lives in `V.money` (pence, not pounds). CE is th
 ## Don’t
 
 - Don’t double-click the `.js` (Windows Script Host will error — that’s expected)
-- Don’t enable the game’s own Cheat mode if you care about feats on that save
+- Don’t enable the game’s own Cheat mode if you care about feats on that sav.
 
 ## Notes
 
