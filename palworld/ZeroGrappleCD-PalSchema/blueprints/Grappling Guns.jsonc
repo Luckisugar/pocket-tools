@@ -1,5 +1,5 @@
-// Zero cooldown on all grappling gun tiers (PalSchema blueprint CDO patch).
-// Vanilla CoolDownTime: 12 / 10 / 8 / 6 seconds (T1–T4).
+// Zero grapple cooldown — PalSchema (SERVER)
+// CoolDownTime vanilla: 12 / 10 / 8 / 6 (T1–T4). Also disable flag via debug if supported.
 {
     "BP_GrapplingGun_C": {
         "CoolDownTime": 0.0,
@@ -14,6 +14,10 @@
         "NearCoolTimeRate": 0.0
     },
     "BP_GrapplingGun_4_C": {
+        "CoolDownTime": 0.0,
+        "NearCoolTimeRate": 0.0
+    },
+    "BP_AirGrapplingGun_C": {
         "CoolDownTime": 0.0,
         "NearCoolTimeRate": 0.0
     }
