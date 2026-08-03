@@ -1,9 +1,9 @@
--- ZeroGrappleCD client — cooldown is largely CLIENT-side for guns
+-- ZeroGrappleCD client — no periodic FindAllOf (that stuttered)
 return {
-    cool_down_time = 0.0,
-    -- game debug flag (PalDebugSetting.bDisableGrapplingCoolDown)
+    -- tiny non-zero so UI bar finishes instead of sitting on "0"
+    cool_down_time = 0.05,
     use_debug_flag = true,
-    -- light re-apply while holding a grapple (ms). 0 = off. Keep >= 1000 to avoid stutter.
-    hold_patch_ms = 1000,
+    -- 0 = never loop-scan (stutter fix)
+    hold_patch_ms = 0,
     verbose = true,
 }
