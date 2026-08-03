@@ -1,0 +1,12 @@
+{
+    // 2x base build radius (vanilla BaseCampAreaRange = 3500 cm).
+    // After install: restart server, destroy + rebuild palbox for existing bases.
+    // Do NOT stack with other base-range mods.
+    "BP_PalGameSetting_C": {
+        "BaseCampAreaRange": 7000.0,
+        "BaseCampNeighborMinimumDistance": 0.0,
+        "BaseCampPalFindWorkRange": 800.0,
+        "BaseCampFoliageWorkableRange": 400.0,
+        "SpawnerDisableDistanceCM_FromBaseCamp": 8000.0
+    }
+}
