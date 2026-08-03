@@ -1,4 +1,4 @@
--- OursBaseRing - match CGR Base Camp Range (2x vanilla)
+-- BaseRing2x - match CGR Base Camp Range (2x vanilla)
 local config = {
     target_radius_cm = 7000.0,
     vanilla_radius_cm = 3500.0,

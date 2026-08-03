@@ -1,5 +1,5 @@
 --[[
-  OursBaseRing — client-only blue palbox ring scale
+  BaseRing2x — client-only blue palbox ring scale
   Matches CGR BaseCampAreaRange 7000 (2x of 3500).
 ]]
 
@@ -18,7 +18,7 @@ local CDO_AREA1 = PALBOX_PATH .. ":AreaRange1_GEN_VARIABLE"
 
 local function log(msg)
     if config.verbose then
-        print("[OursBaseRing] " .. tostring(msg))
+        print("[BaseRing2x] " .. tostring(msg))
     end
 end
 
